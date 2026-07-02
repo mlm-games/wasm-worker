@@ -14,7 +14,7 @@ use super::super::super::global::Global;
 #[cfg(feature = "audio-worklet")]
 use super::super::audio_worklet::register::THREAD_LOCK_INDEXES;
 #[cfg(feature = "audio-worklet")]
-use super::super::js::ArrayExt;
+use super::super::js;
 use super::super::{channel, main, oneshot, JoinHandle, ScopeData, ThreadId};
 use super::{SpawnData, Task};
 use crate::thread::atomics::channel::Receiver;
@@ -191,7 +191,7 @@ fn spawn_internal(
 			THREAD_LOCK_INDEXES.with(|indexes| {
 				if let Some(transfer) = transfer {
 					worker.post_message_with_transfer(
-						&ArrayExt::of6(
+						&js::of6(
 							module,
 							memory,
 							&stack_size.into(),
@@ -202,7 +202,7 @@ fn spawn_internal(
 						&transfer,
 					)
 				} else {
-					worker.post_message(&ArrayExt::of6(
+					worker.post_message(&js::of6(
 						module,
 						memory,
 						&stack_size.into(),

@@ -49,11 +49,11 @@ message = [
 ]
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-js-sys = "0.3.75"
+js-sys = "0.3.80"
 pin-project = "1"
-wasm-bindgen = { version = "0.2.98", default-features = false }
-wasm-bindgen-futures = "0.4.48"
-web-sys = { version = "0.3.75", features = [
+wasm-bindgen = { version = "0.2.120", default-features = false }
+wasm-bindgen-futures = "0.4.50"
+web-sys = { version = "0.3.80", features = [
 	"AbortController",
 	"AbortSignal",
 	"DedicatedWorkerGlobalScope",

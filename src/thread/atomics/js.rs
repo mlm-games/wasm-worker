@@ -85,13 +85,9 @@ extern "C" {
 #[cfg(feature = "audio-worklet")]
 #[wasm_bindgen]
 extern "C" {
-	/// Extension for [`Array`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array).
-	#[wasm_bindgen(js_name = Array)]
-	pub(super) type ArrayExt;
-
 	/// [`Array.of()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/of)
 	/// with six arguments.
-	#[wasm_bindgen(static_method_of = ArrayExt, js_class = Array, js_name = of)]
+	#[wasm_bindgen(js_namespace = Array, js_name = of)]
 	pub fn of6(
 		a: &JsValue,
 		b: &JsValue,
