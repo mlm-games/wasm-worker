@@ -7,8 +7,7 @@ keywords = ["worker", "worklet", "wasm", "web", "thread"]
 license = "MIT OR Apache-2.0"
 name = "web-thread"
 repository = "https://github.com/daxpedda/web-thread"
-rust-version = "1.70"
-version = "0.0.0"
+version = "0.1.1"
 
 [features]
 audio-worklet = [
@@ -49,11 +48,11 @@ message = [
 ]
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-js-sys = "0.3.80"
-pin-project = "1"
-wasm-bindgen = { version = "0.2.120", default-features = false }
-wasm-bindgen-futures = "0.4.50"
-web-sys = { version = "0.3.80", features = [
+js-sys = "0.3.103"
+pin-project = "1.1.13"
+wasm-bindgen = { version = "0.2.126", default-features = false }
+wasm-bindgen-futures = "0.4.76"
+web-sys = { version = "0.3.103", features = [
 	"AbortController",
 	"AbortSignal",
 	"DedicatedWorkerGlobalScope",
@@ -86,13 +85,13 @@ opt-level = 1
 static_assertions = "1"
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-pollster = { version = "0.3", features = ["macro"] }
-ui_test = "0.25"
+pollster = { version = "0.4", features = ["macro"] }
+ui_test = "0.30"
 
 [target.'cfg(target_family = "wasm")'.dev-dependencies]
 async-channel = { version = "2", default-features = false }
 console_error_panic_hook = "0.1"
-itertools = { version = "0.13", default-features = false }
+itertools = { version = "0.15", default-features = false }
 paste = "1"
 wasm-bindgen-futures = "0.4"
 wasm-bindgen-test = "0.3"
