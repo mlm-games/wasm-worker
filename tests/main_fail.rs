@@ -1,3 +1,4 @@
+#![expect(missing_docs, reason = "test crate")]
 #![cfg(target_family = "wasm")]
 
 mod audio_worklet_fail;

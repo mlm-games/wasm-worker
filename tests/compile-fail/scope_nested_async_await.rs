@@ -1,4 +1,4 @@
-//@only-target-wasm32-unknown-unknown
+//@only-target: wasm32-unknown-unknown
 
 async fn scope_nested_async_await() {
 	let mut test = String::new();

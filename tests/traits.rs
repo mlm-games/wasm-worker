@@ -1,3 +1,5 @@
+#![expect(missing_docs, reason = "test crate")]
+
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomPinned;

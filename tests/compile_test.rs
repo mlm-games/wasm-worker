@@ -1,3 +1,5 @@
+//! Test for compile-fail tests.
+
 #![cfg(not(target_family = "wasm"))]
 
 use std::env;
@@ -6,12 +8,12 @@ use std::ffi::OsString;
 use ui_test::custom_flags::rustfix::RustfixMode;
 use ui_test::dependencies::DependencyBuilder;
 use ui_test::status_emitter::Text;
-use ui_test::{Args, Config, Format, OutputConflictHandling};
+use ui_test::{ignore_output_conflict, Args, Config, Format};
 
 #[test]
 fn test() {
 	let mut config = Config {
-		output_conflict_handling: OutputConflictHandling::Ignore,
+		output_conflict_handling: ignore_output_conflict,
 		target: env::var_os("UI_TEST_TARGET").map(|target| target.into_string().unwrap()),
 		..Config::rustc("tests/compile-fail")
 	};
@@ -42,7 +44,7 @@ fn test() {
 	revisioned.set_custom("dependencies", dependency_builder);
 
 	let args = Args::test().unwrap();
-	#[allow(clippy::print_stdout)]
+	#[expect(clippy::print_stdout, reason = "test output")]
 	if let Format::Pretty = args.format {
 		println!(
 			"Compiler: {}",
@@ -52,7 +54,7 @@ fn test() {
 
 	let text = match args.format {
 		Format::Terse => Text::quiet(),
-		Format::Pretty => Text::verbose(),
+		Format::Pretty | Format::JSON => Text::verbose(),
 	};
 	config.with_args(&args);
 

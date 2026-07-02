@@ -1,4 +1,4 @@
-//@only-target-wasm32-unknown-unknown
+//@only-target: wasm32-unknown-unknown
 
 fn test() {
 	web_thread::web::scope_async(|scope| async {

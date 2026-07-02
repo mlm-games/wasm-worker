@@ -17,7 +17,7 @@ fn park() {
 
 	web_thread::park();
 	web_thread::park_timeout(Duration::from_secs(1));
-	#[allow(deprecated)]
+	#[expect(deprecated, reason = "testing deprecated API")]
 	web_thread::park_timeout_ms(1000);
 
 	let elapsed = start.elapsed();
@@ -31,7 +31,7 @@ fn sleep() {
 	let start = Instant::now();
 
 	web_thread::sleep(Duration::from_secs(1));
-	#[allow(deprecated)]
+	#[expect(deprecated, reason = "testing deprecated API")]
 	web_thread::sleep_ms(1000);
 
 	let elapsed = start.elapsed();

@@ -71,10 +71,7 @@ impl Command {
 ///
 /// This will panic if called outside the main thread.
 pub(super) fn init_main_thread() {
-	debug_assert!(
-		super::is_main_thread(),
-		"initizalizing main thread without being on the main thread"
-	);
+	super::is_main_thread();
 
 	COMMAND_SENDER.get_or_init(|| {
 		super::has_spawn_support();

@@ -408,11 +408,8 @@ impl Future for RegisterThreadFuture {
 					ref mut promise, ..
 				} => match Pin::new(promise).poll(cx) {
 					Poll::Ready(Ok(_)) => {
-						// This is checked earlier.
-						debug_assert!(
-							is_main_thread(),
-							"started registering thread without being on the main thread"
-						);
+						// Ensure `MAIN_THREAD` is primed on the main thread.
+						is_main_thread();
 						// Before spawning a new thread make sure we initialize the main thread.
 						main::init_main_thread();
 

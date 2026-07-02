@@ -1,3 +1,5 @@
+#![expect(missing_docs, reason = "test crate")]
+
 #[cfg(all(
 	target_family = "wasm",
 	target_feature = "atomics",

@@ -1,3 +1,5 @@
+#![expect(missing_docs, reason = "test crate")]
+
 #[cfg(target_family = "wasm")]
 mod basic_success;
 #[cfg(all(
