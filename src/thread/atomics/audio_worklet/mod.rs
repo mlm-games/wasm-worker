@@ -58,28 +58,35 @@ pub(in super::super) fn audio_worklet_node<P: 'static + ExtendAudioWorkletProces
 		Some(options) => options.unchecked_ref(),
 		None => &Object::new().unchecked_into(),
 	};
+	let processor_options = options.get_processor_options();
+	let has_processor_options = processor_options.is_some();
 
 	let data = Box::new(Data {
 		type_id: TypeId::of::<P>(),
 		value: Box::new(data),
 	});
+	let processor_options: ProcessorOptions =
+		processor_options.unwrap_or_default().unchecked_into();
 	let data: NonNull<Data> = NonNull::from(Box::leak(data));
+	processor_options.set_data(data);
 
-	// Store data directly on options (not via processorOptions) to work around
-	// a Chrome bug where setting processorOptions causes AudioWorkletNode
-	// name lookup to fail.
-	DATA_PROPERTY_NAME.with(|name| {
-		Reflect::set(options, name, &js_sys::Number::from(data.as_ptr() as u32))
-			.expect("expected options to be an Object");
-	});
+	if !has_processor_options {
+		options.set_processor_options(Some(&processor_options));
+	}
 
 	let result = AudioWorkletNode::new_with_options(context, name, options);
 
-	// Clean up our custom property
-	DATA_PROPERTY_NAME.with(|name| {
-		Reflect::delete_property(options, name)
-			.expect("expected options to be an Object");
-	});
+	if has_processor_options {
+		// If the caller provided processorOptions, clean up __web_thread_data
+		// that we added inside it (so repeated calls don't leak).
+		DATA_PROPERTY_NAME
+			.with(|name| Reflect::delete_property(&processor_options, name))
+			.expect("expected `processor_options` to be an `Object`");
+	} else {
+		PROCESSOR_OPTIONS_PROPERTY_NAME
+			.with(|name| Reflect::delete_property(options, name))
+			.expect("expected `AudioWorkletNodeOptions` to be an `Object`");
+	}
 
 	match result {
 		Ok(node) => Ok(node),
@@ -95,8 +102,10 @@ pub(in super::super) fn audio_worklet_node<P: 'static + ExtendAudioWorkletProces
 	}
 }
 
-/// Data stored on [`AudioWorkletNodeOptions`] to transport
+/// Data stored in [`AudioWorkletNodeOptions.processorOptions`] to transport
 /// [`ExtendAudioWorkletProcessor::Data`].
+///
+/// [`AudioWorkletNodeOptions.processorOptions`]: https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode/AudioWorkletNode#processoroptions
 struct Data {
 	/// [`TypeId`] to compare to the type when arriving at the constructor.
 	type_id: TypeId,

@@ -6,13 +6,13 @@ use std::any::TypeId;
 use std::io::Error;
 use std::marker::PhantomData;
 
-use js_sys::{Array, Iterator, JsString, Object, Reflect};
+use js_sys::{Array, Iterator, JsString, Object};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsCast;
 use web_sys::{AudioWorkletNodeOptions, DomException};
 
+use super::js::ProcessorOptions;
 use super::Data;
-use super::DATA_PROPERTY_NAME;
 use crate::web::audio_worklet::ExtendAudioWorkletProcessor;
 
 /// Implementation for
@@ -85,35 +85,23 @@ impl<P: 'static + ExtendAudioWorkletProcessor> ProcessorConstructor
 	) -> __WebThreadProcessor {
 		let mut processor_data = None;
 
-		// Read __web_thread_data directly from options (not via processorOptions)
-		// to work around a Chrome bug where processorOptions breaks name lookup.
-		let data_ptr: Option<std::ptr::NonNull<Data>> = DATA_PROPERTY_NAME.with(|name| {
-			Reflect::get(&options, name).ok().and_then(|val| {
-				val.as_f64().map(|n| {
-					std::ptr::NonNull::new(n as u32 as *mut Data)
-						.expect("null data pointer")
-				})
-			})
-		});
+		if let Some(processor_options) = options.get_processor_options() {
+			let processor_options: ProcessorOptions = processor_options.unchecked_into();
 
-		if let Some(data_ptr) = data_ptr {
-			// SAFETY: We only store `NonNull<Data>` in `__web_thread_data` at
-			// `super::audio_worklet_node()`.
-			let data: Data = *unsafe { Box::<Data>::from_raw(data_ptr.as_ptr()) };
+			if let Some(data) = processor_options.data() {
+				// SAFETY: We only store `NonNull<Data>` in `__web_thread_data` at
+				// `super::audio_worklet_node()`.
+				let data: Data = *unsafe { Box::<Data>::from_raw(data.as_ptr()) };
 
-			if data.type_id == TypeId::of::<P>() {
-				processor_data = Some(
-					*data
-						.value
-						.downcast::<P::Data>()
-						.expect("wrong type encoded"),
-				);
+				if data.type_id == TypeId::of::<P>() {
+					processor_data = Some(
+						*data
+							.value
+							.downcast::<P::Data>()
+							.expect("wrong type encoded"),
+					);
+				}
 			}
-
-			// Clean up the custom property
-			DATA_PROPERTY_NAME.with(|name| {
-				let _ = Reflect::delete_property(&options, name);
-			});
 		}
 
 		__WebThreadProcessor(Box::new(P::new(this, processor_data, options)))

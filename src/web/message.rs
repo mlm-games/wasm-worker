@@ -219,7 +219,7 @@ impl<const SIZE: usize, T: MessageSend> MessageSend for [T; SIZE] {
 			let serialized = serialized
 				.as_ref()
 				.map(|serialized| serialized.get(usize_is_u32(index)))
-				.filter(|value| !value.is_null());
+				.filter(|value: &JsValue| !value.is_null());
 			let sent = sent
 				.as_mut()
 				.and_then(|sent| sent.get_mut(index))
@@ -286,7 +286,7 @@ macro_rules! message_send_for_tuple {
 					let serialized = serialized
 						.as_ref()
 						.map(|serialized| serialized.get($index))
-						.filter(|value| !value.is_null());
+				.filter(|value: &JsValue| !value.is_null());
 					let sent = sent.as_mut().and_then(|sent| sent.$index.take());
 					$generic::receive(serialized, sent)
 				},)+)

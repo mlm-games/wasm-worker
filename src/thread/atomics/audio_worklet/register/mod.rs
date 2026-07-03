@@ -80,6 +80,27 @@ where
 }
 
 /// Register thread regardless of message.
+/// Polyfill for TextDecoder/TextEncoder in AudioWorkletGlobalScope
+/// These APIs are not available in AudioWorkletGlobalScope but are needed
+/// by wasm-bindgen's string handling.
+const POLYFILL_SCRIPT: &str = concat!(
+	"if(typeof TextDecoder==='undefined'){",
+	"globalThis.TextDecoder=class{constructor(){}",
+	"decode(b){let s='',u=new Uint8Array(b);",
+	"for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);",
+	"return decodeURIComponent(escape(s))",
+	"}}",
+	"}",
+	"if(typeof TextEncoder==='undefined'){",
+	"globalThis.TextEncoder=class{constructor(){}",
+	"encode(s){let r=unescape(encodeURIComponent(s)),",
+	"u=new Uint8Array(r.length);",
+	"for(let i=0;i<r.length;i++)u[i]=r.charCodeAt(i);",
+	"return u",
+	"}}",
+	"}",
+);
+
 fn register_thread_internal(
 	context: BaseAudioContext,
 	stack_size: Option<usize>,
@@ -96,6 +117,8 @@ fn register_thread_internal(
 
 			ScriptUrl::new(&template.replacen("@shim.js", &META.with(Meta::url), 1))
 		};
+		/// Object URL to the TextDecoder polyfill script.
+		static POLYFILL_URL: ScriptUrl = ScriptUrl::new(POLYFILL_SCRIPT);
 	}
 
 	if let AudioContextState::Closed = context.state() {
@@ -115,52 +138,21 @@ fn register_thread_internal(
 		.audio_worklet()
 		.expect("`BaseAudioContext.audioWorklet` expected to be valid");
 
+	// First, load the TextDecoder polyfill module into the AudioWorkletGlobalScope.
+	// This must happen BEFORE the worklet module so that wasm-bindgen's
+	// `cachedTextDecoder` initializes correctly (TextDecoder is not available
+	// natively in AudioWorkletGlobalScope).
 	RegisterThreadFuture(Some(
-		match URL.with(|url| worklet.add_module(url.as_raw())) {
-			Ok(promise) => {
-				context
-					.unchecked_ref::<BaseAudioContextExt>()
-					.set_registered(true);
-				let promise = JsFuture::from(promise);
-				let (memory_sender, memory_receiver) = oneshot::channel();
+		match POLYFILL_URL.with(|url| worklet.add_module(url.as_raw())) {
+			Ok(promise) => State::Polyfill {
+				polyfill_promise: JsFuture::from(promise),
+				context,
+				stack_size,
+				task: Box::new(task),
 				#[cfg(feature = "message")]
-				let (spawn_sender, spawn_receiver) = channel::channel();
-				let thread = Thread::new_with_name(None);
-
-				let task = Box::new({
-					#[cfg(not(feature = "message"))]
-					let thread = thread.clone();
-					move |message| {
-						#[cfg(not(feature = "message"))]
-						{
-							Thread::register(thread);
-							memory_sender.send(ThreadMemory::new(stack_size));
-						}
-						#[cfg(feature = "message")]
-						{
-							let old =
-								SPAWN_SENDER.with(|cell| cell.borrow_mut().replace(spawn_sender));
-							debug_assert!(old.is_none(), "found existing `Sender` in new thread");
-						}
-						task(message);
-					}
-				});
-
-				State::Module {
-					context,
-					promise,
-					thread,
-					task,
-					stack_size,
-					#[cfg(feature = "message")]
-					memory_sender,
-					memory_receiver,
-					#[cfg(feature = "message")]
-					spawn_receiver,
-					#[cfg(feature = "message")]
-					message,
-				}
-			}
+				message,
+				worklet_url: URL.with(|url| url.as_raw().to_string()),
+			},
 			Err(error) => State::Error(super::super::error_from_exception(error)),
 		},
 	))
@@ -174,6 +166,22 @@ pub(in super::super::super) struct RegisterThreadFuture(Option<State>);
 enum State {
 	/// Early error.
 	Error(Error),
+	/// Waiting for the TextDecoder polyfill `Worklet.addModule()`.
+	Polyfill {
+		/// `Promise` returned by `Worklet.addModule()`.
+		polyfill_promise: JsFuture,
+		/// Corresponding [`BaseAudioContext`].
+		context: BaseAudioContext,
+		/// Stack size of the thread.
+		stack_size: Option<usize>,
+		/// Caller-supplied task (not yet wrapped).
+		task: Task,
+		/// Message to be sent.
+		#[cfg(feature = "message")]
+		message: Option<MessageState>,
+		/// Object URL to the worklet script — created here and moved into Module.
+		worklet_url: String,
+	},
 	/// Waiting for `Worklet.addModule()`.
 	Module {
 		/// Corresponding [`BaseAudioContext`].
@@ -258,7 +266,6 @@ enum State {
 		#[cfg(feature = "message")]
 		task: Task,
 		/// [`AudioWorkletNode`] used to initialize the Wasm module.
-		#[cfg(feature = "message")]
 		node: AudioWorkletNode,
 		/// [`Receiver`](channel::Receiver) for [`SpawnData`].
 		#[cfg(feature = "message")]
@@ -274,6 +281,26 @@ impl Debug for State {
 	fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
 		match self {
 			Self::Error(error) => formatter.debug_tuple("Error").field(error).finish(),
+			Self::Polyfill {
+				polyfill_promise,
+				context,
+				stack_size,
+				task,
+				#[cfg(feature = "message")]
+				message,
+				worklet_url,
+			} => {
+				let mut debug_struct = formatter.debug_struct("Polyfill");
+				debug_struct
+					.field("polyfill_promise", polyfill_promise)
+					.field("context", context)
+					.field("stack_size", stack_size)
+					.field("task", &any::type_name_of_val(task))
+					.field("worklet_url", worklet_url);
+				#[cfg(feature = "message")]
+				debug_struct.field("message", message);
+				debug_struct.finish()
+			}
 			Self::Module {
 				context,
 				promise,
@@ -358,7 +385,6 @@ impl Debug for State {
 				memory_receiver,
 				#[cfg(feature = "message")]
 				task,
-				#[cfg(feature = "message")]
 				node,
 				#[cfg(feature = "message")]
 				spawn_receiver,
@@ -370,10 +396,10 @@ impl Debug for State {
 					.field("context", context)
 					.field("thread", thread)
 					.field("memory_receiver", memory_receiver);
+				debug_struct.field("node", node);
 				#[cfg(feature = "message")]
 				debug_struct
 					.field("task", &any::type_name_of_val(task))
-					.field("node", node)
 					.field("spawn_receiver", spawn_receiver)
 					.field("message", message);
 				debug_struct.finish()
@@ -404,6 +430,96 @@ impl Future for RegisterThreadFuture {
 
 			match state {
 				State::Error(error) => return Poll::Ready(Err(error)),
+				State::Polyfill {
+					ref mut polyfill_promise,
+					..
+				} => match Pin::new(polyfill_promise).poll(cx) {
+					Poll::Ready(Ok(_)) => {
+						let State::Polyfill {
+							context,
+							stack_size,
+							task,
+							#[cfg(feature = "message")]
+							message,
+							worklet_url,
+							..
+						} = state
+						else {
+							unreachable!("found wrong state")
+						};
+
+						let worklet = context
+							.audio_worklet()
+							.expect("`BaseAudioContext.audioWorklet` expected to be valid");
+
+						// TextDecoder polyfill loaded. Now load the actual worklet module.
+						match worklet.add_module(worklet_url.as_str()) {
+							Ok(promise) => {
+								context
+									.unchecked_ref::<BaseAudioContextExt>()
+									.set_registered(true);
+								let promise = JsFuture::from(promise);
+								let (memory_sender, memory_receiver) = oneshot::channel();
+								#[cfg(feature = "message")]
+								let (spawn_sender, spawn_receiver) = channel::channel();
+								let thread = Thread::new_with_name(None);
+
+								let wrapped_task = {
+									#[cfg(not(feature = "message"))]
+									let thread = thread.clone();
+									move |_message| {
+										#[cfg(not(feature = "message"))]
+										{
+											Thread::register(thread);
+											memory_sender
+												.send(ThreadMemory::new(stack_size));
+										}
+										#[cfg(feature = "message")]
+										{
+											let old = SPAWN_SENDER.with(|cell| {
+												cell.borrow_mut().replace(spawn_sender)
+											});
+											debug_assert!(
+												old.is_none(),
+												"found existing `Sender` in new thread"
+											);
+										}
+										task(_message);
+									}
+								};
+
+								self.0 = Some(State::Module {
+									context,
+									promise,
+									thread,
+									stack_size,
+									task: Box::new(wrapped_task),
+									#[cfg(feature = "message")]
+									memory_sender,
+									memory_receiver,
+									#[cfg(feature = "message")]
+									spawn_receiver,
+									#[cfg(feature = "message")]
+									message,
+								});
+							}
+							Err(error) => {
+								return Poll::Ready(Err(
+									super::super::error_from_exception(error),
+								));
+							}
+						}
+					}
+					Poll::Ready(Err(error)) => {
+						return Poll::Ready(Err(
+							super::super::error_from_exception(error),
+						))
+					}
+					Poll::Pending => {
+						self.0 = Some(state);
+						return Poll::Pending;
+					}
+				},
 				State::Module {
 					ref mut promise, ..
 				} => match Pin::new(promise).poll(cx) {
@@ -562,15 +678,12 @@ impl Future for RegisterThreadFuture {
 						&options,
 					) {
 						Ok(node) => {
-							#[cfg(not(feature = "message"))]
-							drop(node);
 							self.0 = Some(State::Memory {
 								context,
 								thread,
 								memory_receiver,
 								#[cfg(feature = "message")]
 								task,
-								#[cfg(feature = "message")]
 								node,
 								#[cfg(feature = "message")]
 								spawn_receiver,
@@ -609,7 +722,6 @@ impl Future for RegisterThreadFuture {
 							thread,
 							#[cfg(feature = "message")]
 							task,
-							#[cfg(feature = "message")]
 							node,
 							#[cfg(feature = "message")]
 							spawn_receiver,
@@ -621,6 +733,8 @@ impl Future for RegisterThreadFuture {
 							unreachable!("found wrong state")
 						};
 
+						#[cfg(not(feature = "message"))]
+						let _ = node;
 						#[cfg(feature = "message")]
 						{
 							let node_port = node
