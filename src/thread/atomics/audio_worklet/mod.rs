@@ -28,13 +28,13 @@ use crate::web::audio_worklet::{AudioWorkletNodeError, ExtendAudioWorkletProcess
 #[rustfmt::skip]
 extern "C" {
 	/// Name of our custom property on [`AudioWorkletNodeOptions`].
-	#[wasm_bindgen(thread_local, static_string)]
+	#[wasm_bindgen(thread_local_v2, static_string)]
 	static DATA_PROPERTY_NAME: JsString = "__web_thread_data";
 
 	/// Name of the
 	/// [`AudioWorkletNodeOptions.processorOptions`](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode/AudioWorkletNode#processoroptions)
 	/// property.
-	#[wasm_bindgen(thread_local, static_string)]
+	#[wasm_bindgen(thread_local_v2, static_string)]
 	static PROCESSOR_OPTIONS_PROPERTY_NAME: JsString = "processorOptions";
 }
 

@@ -18,7 +18,6 @@ use js_sys::{Atomics, Int32Array, Object, SharedArrayBuffer};
 use wasm_bindgen::JsCast;
 
 pub(super) use self::parker::Parker;
-use super::js::CROSS_ORIGIN_ISOLATED;
 use super::ScopedJoinHandle;
 
 /// Implementation of [`std::thread::Builder`].
