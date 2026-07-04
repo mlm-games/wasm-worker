@@ -2,8 +2,8 @@
 
 use std::cell::RefCell;
 use std::future::Future;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::{io, mem};
 
 use js_sys::{Array, Function};
@@ -16,8 +16,8 @@ use super::super::super::global::Global;
 use super::super::audio_worklet::register::THREAD_LOCK_INDEXES;
 #[cfg(feature = "audio-worklet")]
 use super::super::js;
-use super::super::{channel, main, oneshot, JoinHandle, ScopeData, ThreadId};
-use super::{SpawnData, Task, DecScopeOnDrop};
+use super::super::{JoinHandle, ScopeData, ThreadId, channel, main, oneshot};
+use super::{DecScopeOnDrop, SpawnData, Task};
 use crate::thread::atomics::channel::Receiver;
 use crate::web::message::{ArrayBuilder, MessageSend};
 
@@ -51,8 +51,16 @@ where
 	let raw_message = message.send(&mut transfer_builder);
 	let transfer = transfer_builder.finish();
 
+	// Incement scope counter before attempting spawn.
+	if let Some(ref scope_data) = scope {
+		scope_data.threads.fetch_add(1, Ordering::Relaxed);
+	}
+
+	let guard = DecScopeOnDrop(scope.clone());
+
 	let task: Task<'_> = Box::new({
 		let thread = thread.clone();
+		let scope = scope.clone();
 		move |message| {
 			super::thread_runner(
 				thread,
@@ -68,13 +76,6 @@ where
 			)
 		}
 	});
-
-	// Increment scope counter before attempting spawn.
-	if let Some(ref scope_data) = scope {
-		scope_data.threads.fetch_add(1, Ordering::Relaxed);
-	}
-
-	let guard = DecScopeOnDrop(scope.clone());
 
 	let handle = if let Some(serialize) = raw_message.serialize {
 		if super::super::is_main_thread() {

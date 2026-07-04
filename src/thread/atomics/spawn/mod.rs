@@ -91,8 +91,18 @@ where
 	#[cfg(feature = "message")]
 	let (spawn_sender, spawn_receiver) = channel::channel();
 
+	// Increment scope counter before attempting spawn.
+	// thread_runner will decrement when the thread finishes.
+	// If spawn fails (panic or error), DecScopeOnDrop decrements.
+	if let Some(ref scope_data) = scope {
+		scope_data.threads.fetch_add(1, Ordering::Relaxed);
+	}
+
+	let guard = DecScopeOnDrop(scope.clone());
+
 	let task: Task<'_> = Box::new({
 		let thread = thread.clone();
+		let scope = scope.clone();
 		move |_| {
 			thread_runner(
 				thread,
@@ -105,15 +115,6 @@ where
 			)
 		}
 	});
-
-	// Increment scope counter before attempting spawn.
-	// thread_runner will decrement when the thread finishes.
-	// If spawn fails (panic or error), DecScopeOnDrop decrements.
-	if let Some(ref scope_data) = scope {
-		scope_data.threads.fetch_add(1, Ordering::Relaxed);
-	}
-
-	let guard = DecScopeOnDrop(scope.clone());
 
 	let handle = spawn_without_message(
 		thread,
