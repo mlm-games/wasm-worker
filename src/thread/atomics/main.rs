@@ -88,6 +88,7 @@ pub(super) fn init_main_thread() {
 						#[cfg(feature = "message")]
 						spawn_receiver,
 						task,
+						scope,
 					}) => {
 						spawn::spawn_internal(
 							id,
@@ -96,9 +97,13 @@ pub(super) fn init_main_thread() {
 							#[cfg(feature = "message")]
 							spawn_receiver,
 							Box::new(task),
+							scope,
 						);
 					}
 					Command::Terminate { id, value, memory } => {
+						// NOTE: If the main thread's event loop shuts down before this
+						// future completes, the worker and memory will be cleaned up by
+						// the browser when the page unloads.
 						wasm_bindgen_futures::spawn_local(async move {
 							WaitAsync::wait(&value, 0).await;
 

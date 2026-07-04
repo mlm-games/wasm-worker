@@ -1,10 +1,10 @@
 //! Polyfill for `Atomics.waitAsync`.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::task::{ready, Context, Poll, Waker};
 
 use js_sys::{Array, Atomics};
@@ -31,16 +31,21 @@ enum State {
 	/// [`Promise`](js_sys::Promise) returned by [`Atomics::wait_async()`].
 	WaitAsync(JsFuture),
 	/// Polyfill implementation of [`Atomics::wait_async()`].
-	Polyfill(Rc<Shared>),
+	Polyfill(Arc<Shared>),
 }
 
 /// Shared state for polyfill implementation.
+///
+/// # Safety
+///
+/// This is shared between the creating thread and the main thread's JS event
+/// loop (where the polyfill Worker's `onmessage` callback runs).
 #[derive(Debug)]
 struct Shared {
 	/// [`true`] when finished.
-	finished: Cell<bool>,
+	finished: AtomicBool,
 	/// Stores [`Waker`] for callback.
-	waker: RefCell<Option<Waker>>,
+	waker: Mutex<Option<Waker>>,
 }
 
 impl Future for WaitAsync {
@@ -64,12 +69,18 @@ impl Future for WaitAsync {
 				Poll::Ready(())
 			}
 			State::Polyfill(shared) => {
-				if shared.finished.get() {
+				if shared.finished.load(Ordering::Acquire) {
 					self.0.take();
 					Poll::Ready(())
 				} else {
-					*shared.waker.borrow_mut() = Some(cx.waker().clone());
-					Poll::Pending
+					*shared.waker.lock().unwrap() = Some(cx.waker().clone());
+					// Re-check after registering the waker to avoid race conditons.
+					if shared.finished.load(Ordering::Acquire) {
+						self.0.take();
+						Poll::Ready(())
+					} else {
+						Poll::Pending
+					}
 				}
 			}
 		}
@@ -124,13 +135,13 @@ impl WaitAsync {
 				.expect("`new Worker()` is not expected to fail with a local script")
 		});
 
-		let shared = Rc::new(Shared {
-			finished: Cell::new(false),
-			waker: RefCell::new(None),
+		let shared = Arc::new(Shared {
+			finished: AtomicBool::new(false),
+			waker: Mutex::new(None),
 		});
 
 		let onmessage_callback = Closure::once_into_js({
-			let shared = Rc::clone(&shared);
+			let shared = Arc::clone(&shared);
 			let worker = worker.clone();
 
 			move || {
@@ -140,9 +151,9 @@ impl WaitAsync {
 					workers.truncate(POLYFILL_WORKER_CACHE);
 				});
 
-				shared.finished.set(true);
+				shared.finished.store(true, Ordering::Release);
 
-				if let Some(waker) = shared.waker.borrow_mut().take() {
+				if let Some(waker) = shared.waker.lock().unwrap().take() {
 					waker.wake();
 				}
 			}

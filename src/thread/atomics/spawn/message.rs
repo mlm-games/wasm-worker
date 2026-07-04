@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::future::Future;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::{io, mem};
 
@@ -16,7 +17,7 @@ use super::super::audio_worklet::register::THREAD_LOCK_INDEXES;
 #[cfg(feature = "audio-worklet")]
 use super::super::js;
 use super::super::{channel, main, oneshot, JoinHandle, ScopeData, ThreadId};
-use super::{SpawnData, Task};
+use super::{SpawnData, Task, DecScopeOnDrop};
 use crate::thread::atomics::channel::Receiver;
 use crate::web::message::{ArrayBuilder, MessageSend};
 
@@ -42,7 +43,7 @@ where
 	T: Send,
 	M: MessageSend,
 {
-	let thread = super::thread_init(name, scope.as_deref());
+	let thread = super::thread_init(name);
 	let (result_sender, result_receiver) = oneshot::channel();
 	let (spawn_sender, spawn_receiver) = channel::channel();
 
@@ -68,7 +69,14 @@ where
 		}
 	});
 
-	if let Some(serialize) = raw_message.serialize {
+	// Increment scope counter before attempting spawn.
+	if let Some(ref scope_data) = scope {
+		scope_data.threads.fetch_add(1, Ordering::Relaxed);
+	}
+
+	let guard = DecScopeOnDrop(scope.clone());
+
+	let handle = if let Some(serialize) = raw_message.serialize {
 		if super::super::is_main_thread() {
 			main::init_main_thread();
 
@@ -80,6 +88,7 @@ where
 				&serialize,
 				transfer,
 				Box::new(task),
+				scope,
 			)?;
 		} else {
 			// SAFETY: `task` has to be `'static` or `scope` has to be `Some`, which
@@ -92,6 +101,7 @@ where
 				stack_size,
 				spawn_receiver,
 				task,
+				scope: scope.clone(),
 			};
 
 			SPAWN_SENDER
@@ -116,19 +126,23 @@ where
 			})?;
 		}
 
-		Ok(JoinHandle {
+		JoinHandle {
 			receiver: Some(result_receiver),
 			thread,
-		})
+		}
 	} else {
-		Ok(super::spawn_without_message(
+		super::spawn_without_message(
 			thread,
 			stack_size,
 			result_receiver,
 			spawn_receiver,
 			task,
-		))
-	}
+			scope,
+		)
+	};
+
+	guard.disarm();
+	Ok(handle)
 }
 
 /// Send [`MessageSend`] over any [`HasMessagePortInterface`].
@@ -155,6 +169,8 @@ fn send_message(
 }
 
 /// Spawning thread regardless of being nested.
+///
+/// On error the scope counter is decremented (handled by `spawn_common`).
 fn spawn_internal(
 	id: ThreadId,
 	name: Option<&str>,
@@ -163,12 +179,14 @@ fn spawn_internal(
 	serialize: &JsValue,
 	transfer: Option<Array>,
 	task: Task<'_>,
+	scope: Option<Arc<ScopeData>>,
 ) -> io::Result<()> {
 	let result = super::spawn_common(
 		id,
 		name,
 		spawn_receiver,
 		task,
+		scope,
 		#[cfg(not(feature = "audio-worklet"))]
 		|worker: &Worker, module, memory, task| {
 			if let Some(transfer) = transfer {
@@ -287,6 +305,13 @@ pub(in super::super) fn setup_message_handler(
 		let message = event.data();
 
 		if message.is_undefined() {
+			// Sentinel: the sending side failed to transfer the serialize data.
+			if let Some(ref scope) = data.scope {
+				if scope.threads.fetch_sub(1, Ordering::Release) == 1 {
+					scope.thread.unpark();
+					scope.waker.wake();
+				}
+			}
 			return;
 		}
 
@@ -294,7 +319,8 @@ pub(in super::super) fn setup_message_handler(
 		let serialize = values.next().expect("no serialized data found");
 		let transfer = values.next().map(Array::unchecked_from_js);
 
-		spawn_internal(
+		// spawn_common handles scope decrement on error internally.
+		if let Err(error) = spawn_internal(
 			data.id,
 			data.name.as_deref(),
 			data.stack_size,
@@ -302,8 +328,10 @@ pub(in super::super) fn setup_message_handler(
 			&serialize,
 			transfer,
 			Box::new(data.task),
-		)
-		.expect("unexpected serialization error when serialization succeeded when sending this");
+			data.scope,
+		) {
+			drop(error);
+		}
 	});
 	this.set_onmessage(Some(message_handler.as_ref().unchecked_ref()));
 

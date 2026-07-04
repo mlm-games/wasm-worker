@@ -1,7 +1,5 @@
 //! Parker implementation copied from Std.
 
-#![allow(warnings)]
-
 // See <https://github.com/rust-lang/rust/blob/1.75.0/library/std/src/sys_common/thread_parking/futex.rs>.
 
 use std::pin::Pin;
@@ -134,6 +132,11 @@ impl Parker {
 /// Returns directly if the futex doesn't hold the expected value.
 ///
 /// Returns false on timeout, and true in all other cases.
+#[allow(
+	clippy::as_conversions,
+	clippy::cast_possible_wrap,
+	clippy::cast_sign_loss
+)]
 pub fn futex_wait(futex: &AtomicU32, expected: u32, timeout: Option<Duration>) -> bool {
 	let timeout = timeout
 		.and_then(|t| t.as_nanos().try_into().ok())
@@ -151,6 +154,7 @@ pub fn futex_wait(futex: &AtomicU32, expected: u32, timeout: Option<Duration>) -
 ///
 /// Returns true if this actually woke up such a thread,
 /// or false if no thread was waiting on this futex.
+#[allow(clippy::as_conversions)]
 pub fn futex_wake(futex: &AtomicU32) -> bool {
 	unsafe { std::arch::wasm32::memory_atomic_notify(futex as *const AtomicU32 as *mut i32, 1) > 0 }
 }

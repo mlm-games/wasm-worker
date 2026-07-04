@@ -4,11 +4,12 @@
 pub(super) mod message;
 
 use std::future::Future;
+use std::mem;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use std::{io, mem};
+use std::io;
 
 use js_sys::Array;
 use js_sys::WebAssembly::{Memory, Module};
@@ -44,6 +45,28 @@ pub(super) struct SpawnData {
 	pub(super) spawn_receiver: channel::Receiver<SpawnData>,
 	/// Task.
 	pub(super) task: Task<'static>,
+	/// Scope data to decrement counter on failure.
+	pub(super) scope: Option<Arc<ScopeData>>,
+}
+
+/// Guard that decrements a scope counter on drop if not disarmed.
+pub(super) struct DecScopeOnDrop(Option<Arc<ScopeData>>);
+
+impl DecScopeOnDrop {
+	fn disarm(mut self) {
+		self.0 = None;
+	}
+}
+
+impl Drop for DecScopeOnDrop {
+	fn drop(&mut self) {
+		if let Some(ref scope) = self.0 {
+			if scope.threads.fetch_sub(1, Ordering::Release) == 1 {
+				scope.thread.unpark();
+				scope.waker.wake();
+			}
+		}
+	}
 }
 
 /// Internal spawn function.
@@ -63,7 +86,7 @@ where
 	F2: Future<Output = T>,
 	T: Send,
 {
-	let thread = thread_init(name, scope.as_deref());
+	let thread = Thread::new_with_name(name);
 	let (result_sender, result_receiver) = oneshot::channel();
 	#[cfg(feature = "message")]
 	let (spawn_sender, spawn_receiver) = channel::channel();
@@ -83,14 +106,27 @@ where
 		}
 	});
 
-	Ok(spawn_without_message(
+	// Increment scope counter before attempting spawn.
+	// thread_runner will decrement when the thread finishes.
+	// If spawn fails (panic or error), DecScopeOnDrop decrements.
+	if let Some(ref scope_data) = scope {
+		scope_data.threads.fetch_add(1, Ordering::Relaxed);
+	}
+
+	let guard = DecScopeOnDrop(scope.clone());
+
+	let handle = spawn_without_message(
 		thread,
 		stack_size,
 		result_receiver,
 		#[cfg(feature = "message")]
 		spawn_receiver,
 		task,
-	))
+		scope,
+	);
+
+	guard.disarm();
+	Ok(handle)
 }
 
 /// Spawn if no message requires transferring through JS.
@@ -100,6 +136,7 @@ fn spawn_without_message<T>(
 	result_receiver: oneshot::Receiver<T>,
 	#[cfg(feature = "message")] spawn_receiver: channel::Receiver<SpawnData>,
 	task: Task<'_>,
+	scope: Option<Arc<ScopeData>>,
 ) -> JoinHandle<T> {
 	if super::is_main_thread() {
 		main::init_main_thread();
@@ -111,6 +148,7 @@ fn spawn_without_message<T>(
 			#[cfg(feature = "message")]
 			spawn_receiver,
 			Box::new(task),
+			scope,
 		);
 	} else {
 		// SAFETY: `task` has to be `'static` or `scope` has to be `Some`, which
@@ -124,6 +162,7 @@ fn spawn_without_message<T>(
 			#[cfg(feature = "message")]
 			spawn_receiver,
 			task,
+			scope,
 		})
 		.send();
 	}
@@ -136,15 +175,8 @@ fn spawn_without_message<T>(
 
 /// Common functionality between thread spawning initialization, regardless if a
 /// message is passed or not.
-fn thread_init(name: Option<String>, scope: Option<&ScopeData>) -> Thread {
-	let thread = Thread::new_with_name(name);
-
-	if let Some(scope) = &scope {
-		// This can't overflow because creating a `ThreadId` would fail beforehand.
-		scope.threads.fetch_add(1, Ordering::Relaxed);
-	}
-
-	thread
+fn thread_init(name: Option<String>) -> Thread {
+	Thread::new_with_name(name)
 }
 
 /// Common functionality between threads, regardless if a message is passed.
@@ -194,19 +226,24 @@ fn thread_runner<'scope, T: 'scope + Send, F1: 'scope + FnOnce() -> F2, F2: Futu
 }
 
 /// Spawning thread regardless of being nested.
+///
+/// On error the scope counter is decremented (handled by `spawn_common`).
+/// The caller is responsible for incrementing the scope counter before calling.
 pub(super) fn spawn_internal(
 	id: ThreadId,
 	name: Option<&str>,
 	stack_size: Option<usize>,
 	#[cfg(feature = "message")] spawn_receiver: channel::Receiver<SpawnData>,
 	task: Task<'_>,
+	scope: Option<Arc<ScopeData>>,
 ) {
-	spawn_common(
+	let result = spawn_common(
 		id,
 		name,
 		#[cfg(feature = "message")]
 		spawn_receiver,
 		task,
+		scope,
 		|worker, module, memory, task| {
 			#[cfg(not(feature = "audio-worklet"))]
 			let message = Array::of4(module, memory, &stack_size.into(), &task);
@@ -217,16 +254,23 @@ pub(super) fn spawn_internal(
 			};
 			worker.post_message(&message)
 		},
-	)
-	.expect("`Worker.postMessage()` is not expected to fail without a `transfer` object");
+	);
+
+	if let Err(error) = result {
+		// `spawn_common` already decremented the scope counter.
+		drop(error);
+	}
 }
 
 /// [`spawn_internal`] regardless if a message is passed or not.
+///
+/// On error the scope counter will be decremented if `scope` is provided.
 fn spawn_common(
 	id: ThreadId,
 	name: Option<&str>,
 	#[cfg(feature = "message")] spawn_receiver: channel::Receiver<SpawnData>,
 	task: Task<'_>,
+	scope: Option<Arc<ScopeData>>,
 	post: impl FnOnce(&Worker, &Module, &Memory, JsValue) -> Result<(), JsValue>,
 ) -> Result<(), JsValue> {
 	thread_local! {
@@ -265,6 +309,12 @@ fn spawn_common(
 		let task: Task<'_> = *unsafe { Box::from_raw(task.as_ptr()) };
 		drop(task);
 		worker.terminate();
+		if let Some(ref scope) = scope {
+			if scope.threads.fetch_sub(1, Ordering::Release) == 1 {
+				scope.thread.unpark();
+				scope.waker.wake();
+			}
+		}
 		return Err(err);
 	};
 
