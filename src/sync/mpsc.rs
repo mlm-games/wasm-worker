@@ -14,6 +14,9 @@ struct Shared<T> {
     receiver_active: AtomicBool,
 }
 
+/// The sending half of an mpsc channel.
+///
+/// Can be cloned to create multiple producers.
 pub struct Sender<T> {
     shared: Arc<Shared<T>>,
 }
@@ -42,6 +45,7 @@ impl<T> fmt::Debug for Sender<T> {
     }
 }
 
+/// The receiving half of an mpsc channel.
 pub struct Receiver<T> {
     shared: Arc<Shared<T>>,
     _marker: PhantomData<Cell<()>>,
@@ -60,10 +64,13 @@ impl<T> fmt::Debug for Receiver<T> {
     }
 }
 
+/// Error returned by `try_recv`.
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 #[non_exhaustive]
 pub enum TryRecvError {
+    /// The channel is empty but not disconnected.
     Empty,
+    /// The channel is disconnected.
     Disconnected,
 }
 
@@ -78,10 +85,13 @@ impl fmt::Display for TryRecvError {
 
 impl std::error::Error for TryRecvError {}
 
+/// Error returned by `recv_timeout` methods.
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 #[non_exhaustive]
 pub enum RecvTimeoutError {
+    /// Operation timed out.
     Timeout,
+    /// Channel is disconnected.
     Disconnected,
 }
 
@@ -96,9 +106,11 @@ impl fmt::Display for RecvTimeoutError {
 
 impl std::error::Error for RecvTimeoutError {}
 
+/// Error returned by `recv` when the channel is disconnected.
 #[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum RecvError {
+    /// The channel has been disconnected.
     Disconnected,
 }
 
@@ -110,6 +122,7 @@ impl fmt::Display for RecvError {
 
 impl std::error::Error for RecvError {}
 
+/// Error returned by `send` when the receiver is disconnected.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub struct SendError<T>(pub T);
 
@@ -127,6 +140,7 @@ impl<T> fmt::Display for SendError<T> {
 
 impl<T> std::error::Error for SendError<T> {}
 
+/// Creates a new mpsc channel, returning the sender and receiver halves.
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared {
         queue: Mutex::new(VecDeque::new()),
@@ -146,6 +160,7 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
 }
 
 impl<T> Sender<T> {
+    /// Sends a value, spinning if the lock is contended.
     pub fn send_spin(&self, t: T) -> Result<(), SendError<T>> {
         if !self.shared.receiver_active.load(Ordering::SeqCst) {
             return Err(SendError(t));
@@ -160,6 +175,7 @@ impl<T> Sender<T> {
         Ok(())
     }
 
+    /// Sends a value, blocking if the lock is contended.
     pub fn send_block(&self, t: T) -> Result<(), SendError<T>> {
         if !self.shared.receiver_active.load(Ordering::SeqCst) {
             return Err(SendError(t));
@@ -174,6 +190,7 @@ impl<T> Sender<T> {
         Ok(())
     }
 
+    /// Sends a value using the best strategy for the platform.
     pub fn send_sync(&self, t: T) -> Result<(), SendError<T>> {
         if !self.shared.receiver_active.load(Ordering::SeqCst) {
             return Err(SendError(t));
@@ -188,6 +205,7 @@ impl<T> Sender<T> {
         Ok(())
     }
 
+    /// Sends a value asynchronously.
     pub async fn send_async(&self, t: T) -> Result<(), SendError<T>> {
         if !self.shared.receiver_active.load(Ordering::SeqCst) {
             return Err(SendError(t));
@@ -204,6 +222,7 @@ impl<T> Sender<T> {
 }
 
 impl<T> Receiver<T> {
+    /// Attempts to receive a value without blocking.
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         let mut queue = match self.shared.queue.try_lock() {
             Ok(guard) => guard,
@@ -221,6 +240,7 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value, spinning if empty.
     pub fn recv_spin(&self) -> Result<T, RecvError> {
         let mut queue = self.shared.queue.lock_spin();
         loop {
@@ -234,6 +254,7 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value, spinning if empty, with a deadline.
     pub fn recv_spin_timeout(&self, deadline: crate::sync::Instant) -> Result<T, RecvTimeoutError> {
         let mut queue = match self.shared.queue.lock_spin_timeout(deadline) {
             Some(guard) => guard,
@@ -254,6 +275,7 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value, blocking if empty.
     pub fn recv_block(&self) -> Result<T, RecvError> {
         let mut queue = self.shared.queue.lock_block();
         loop {
@@ -267,6 +289,7 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value, blocking if empty, with a deadline.
     pub fn recv_block_timeout(&self, deadline: crate::sync::Instant) -> Result<T, RecvTimeoutError> {
         let mut queue = match self.shared.queue.lock_block_timeout(deadline) {
             Some(guard) => guard,
@@ -287,6 +310,7 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value using the best strategy for the platform.
     pub fn recv_sync(&self) -> Result<T, RecvError> {
         let mut queue = self.shared.queue.lock_sync();
         loop {
@@ -300,6 +324,7 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value using the best platform strategy with a deadline.
     pub fn recv_sync_timeout(&self, deadline: crate::sync::Instant) -> Result<T, RecvTimeoutError> {
         let mut queue = match self.shared.queue.lock_sync_timeout(deadline) {
             Some(guard) => guard,
@@ -320,6 +345,7 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value asynchronously.
     pub async fn recv_async(&self) -> Result<T, RecvError> {
         let mut queue = self.shared.queue.lock_async().await;
         loop {
@@ -333,7 +359,11 @@ impl<T> Receiver<T> {
         }
     }
 
-    pub async fn recv_async_timeout(&self, deadline: crate::sync::Instant) -> Result<T, RecvTimeoutError> {
+    /// Receives a value asynchronously with a deadline.
+    pub async fn recv_async_timeout(
+        &self,
+        deadline: crate::sync::Instant,
+    ) -> Result<T, RecvTimeoutError> {
         let mut queue = match self.shared.queue.lock_async_timeout(deadline).await {
             Some(guard) => guard,
             None => return Err(RecvTimeoutError::Timeout),
@@ -365,6 +395,7 @@ impl<T> Iterator for IntoIter<T> {
     }
 }
 
+/// An iterator over messages from the receiver.
 pub struct IntoIter<T> {
     rx: Receiver<T>,
 }

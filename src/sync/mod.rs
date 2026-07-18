@@ -1,15 +1,21 @@
+/// Condition variable for blocking threads while waiting for events.
 pub mod condvar;
+/// RAII guard types (Guard, ReadGuard, WriteGuard) that release locks on drop.
 pub mod guard;
+/// Multi-producer, single-consumer channels for message passing.
 pub mod mpsc;
+/// Mutual exclusion primitive with multiple locking strategies.
 pub mod mutex;
+/// Reader-writer lock allowing multiple readers or one writer.
 pub mod rwlock;
+/// Spinlock for short-lived critical sections.
 pub mod spinlock;
 
 pub use guard::Guard;
 pub use mutex::{Mutex, NotAvailable};
 pub use spinlock::Spinlock;
 
-#[cfg(not(target_arch = "wasm32"))] // NOTE: just helps read even thouh the seperation isn't helpful
+#[cfg(not(target_arch = "wasm32"))]
 pub use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 pub use web_time::Instant;

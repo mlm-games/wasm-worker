@@ -1,6 +1,7 @@
 use crate::sync::Mutex;
 use crate::sync::rwlock::{RwLock, LOCKED_WRITE, UNLOCKED};
 
+/// RAII guard that releases a `Mutex` lock on drop.
 pub struct Guard<'a, T> {
     pub(crate) mutex: &'a Mutex<T>,
     pub(crate) data: &'a mut T,
@@ -54,53 +55,55 @@ impl<T> AsMut<T> for Guard<'_, T> {
     }
 }
 
+/// RAII guard that releases a `RwLock` read lock on drop.
 pub struct ReadGuard<'a, T> {
     pub(crate) rwlock: &'a RwLock<T>,
 }
 
+/// RAII guard that releases a `RwLock` write lock on drop.
 pub struct WriteGuard<'a, T> {
     pub(crate) rwlock: &'a RwLock<T>,
 }
 
-impl<'a, T> AsRef<T> for ReadGuard<'a, T> {
+impl<T> AsRef<T> for ReadGuard<'_, T> {
     fn as_ref(&self) -> &T {
         self
     }
 }
 
-impl<'a, T> AsRef<T> for WriteGuard<'a, T> {
+impl<T> AsRef<T> for WriteGuard<'_, T> {
     fn as_ref(&self) -> &T {
         self
     }
 }
 
-impl<'a, T> AsMut<T> for WriteGuard<'a, T> {
+impl<T> AsMut<T> for WriteGuard<'_, T> {
     fn as_mut(&mut self) -> &mut T {
         &mut *self
     }
 }
 
-impl<'a, T> std::ops::Deref for WriteGuard<'a, T> {
+impl<T> std::ops::Deref for WriteGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
         unsafe { &*self.rwlock.inner.get() }
     }
 }
 
-impl<'a, T> std::ops::DerefMut for WriteGuard<'a, T> {
+impl<T> std::ops::DerefMut for WriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.rwlock.inner.get() }
     }
 }
 
-impl<'a, T> std::ops::Deref for ReadGuard<'a, T> {
+impl<T> std::ops::Deref for ReadGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.rwlock.inner.get() }
     }
 }
 
-impl<'a, T> Drop for ReadGuard<'a, T> {
+impl<T> Drop for ReadGuard<'_, T> {
     fn drop(&mut self) {
         let r = self
             .rwlock
@@ -111,7 +114,7 @@ impl<'a, T> Drop for ReadGuard<'a, T> {
     }
 }
 
-impl<'a, T> Drop for WriteGuard<'a, T> {
+impl<T> Drop for WriteGuard<'_, T> {
     fn drop(&mut self) {
         let old = self
             .rwlock

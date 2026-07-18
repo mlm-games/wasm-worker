@@ -64,6 +64,8 @@
 	doc(cfg_hide(docsrs, target_family = "wasm", target_os = "unknown"))
 )]
 
+/// Cross-platform sync primitives (Mutex, RwLock, Condvar, mpsc, Spinlock)
+/// that work on native and WebAssembly, adapting locking strategy per platform.
 pub mod sync;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]

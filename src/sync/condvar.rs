@@ -10,7 +10,6 @@ use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 use web_time::Instant;
 
-#[derive(Debug)]
 struct AsyncWaiter {
     id: u64,
     sender: r#continue::Sender<()>,
@@ -18,14 +17,26 @@ struct AsyncWaiter {
 
 static ASYNC_WAITER_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Debug)]
+use std::fmt;
+
+/// A condition variable that works across native and WebAssembly.
+///
+/// Allows threads to wait for a condition and be notified when it changes.
+/// Adapts waiting strategy to the platform.
 pub struct Condvar {
     waiting_sync_threads: Spinlock<Vec<crate::Thread>>,
     waiting_async_threads: Spinlock<Vec<AsyncWaiter>>,
     waiting_spin_threads: Spinlock<Vec<Arc<AtomicBool>>>,
 }
 
+impl fmt::Debug for Condvar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Condvar").finish_non_exhaustive()
+    }
+}
+
 impl Condvar {
+    /// Creates a new condition variable.
     pub const fn new() -> Self {
         Condvar {
             waiting_sync_threads: Spinlock::new(vec![]),
@@ -34,6 +45,7 @@ impl Condvar {
         }
     }
 
+    /// Wakes up one blocked thread.
     pub fn notify_one(&self) {
         let thread = self.waiting_spin_threads.with_mut(|threads| threads.pop());
         if let Some(thread) = thread {
@@ -51,6 +63,7 @@ impl Condvar {
         }
     }
 
+    /// Wakes up all blocked threads.
     pub fn notify_all(&self) {
         let threads = self.waiting_spin_threads.with_mut(std::mem::take);
         for thread in threads {
@@ -66,9 +79,12 @@ impl Condvar {
         }
     }
 
+    /// Waits for a notification using the best strategy for the platform.
     pub fn wait_sync<'a, T>(&self, guard: Guard<'a, T>) -> Guard<'a, T> {
         #[cfg(not(target_arch = "wasm32"))]
-        { self.wait_block(guard) }
+        {
+            self.wait_block(guard)
+        }
         #[cfg(target_arch = "wasm32")]
         {
             if crate::sync::atomics_wait_supported() {
@@ -79,6 +95,7 @@ impl Condvar {
         }
     }
 
+    /// Waits while the predicate returns `true`, using the best platform strategy.
     pub fn wait_sync_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -110,13 +127,16 @@ impl Condvar {
         }
     }
 
+    /// Waits with a deadline using the best platform strategy.
     pub fn wait_sync_timeout<'a, T>(
         &self,
         guard: Guard<'a, T>,
         deadline: Instant,
     ) -> (Guard<'a, T>, WaitTimeoutResult) {
         #[cfg(not(target_arch = "wasm32"))]
-        { self.wait_block_timeout(guard, deadline) }
+        {
+            self.wait_block_timeout(guard, deadline)
+        }
         #[cfg(target_arch = "wasm32")]
         {
             if crate::sync::atomics_wait_supported() {
@@ -127,6 +147,7 @@ impl Condvar {
         }
     }
 
+    /// Waits while predicate returns `true` with a deadline.
     pub fn wait_sync_timeout_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -171,6 +192,7 @@ impl Condvar {
         }
     }
 
+    /// Blocks the current thread while waiting for a notification.
     pub fn wait_block<'a, T>(&self, guard: Guard<'a, T>) -> Guard<'a, T> {
         let mutex = guard.mutex;
         self.waiting_sync_threads.with_mut(|threads| {
@@ -181,6 +203,7 @@ impl Condvar {
         mutex.lock_sync()
     }
 
+    /// Blocks while the predicate returns `true`.
     pub fn wait_block_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -195,6 +218,7 @@ impl Condvar {
         guard
     }
 
+    /// Blocks with a deadline for notification.
     pub fn wait_block_timeout<'a, T>(
         &self,
         guard: Guard<'a, T>,
@@ -243,6 +267,7 @@ impl Condvar {
         }
     }
 
+    /// Blocks while predicate is `true` with a deadline.
     pub fn wait_block_timeout_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -262,6 +287,7 @@ impl Condvar {
         (guard, WaitTimeoutResult(false))
     }
 
+    /// Spins while waiting for a notification.
     pub fn wait_spin<'a, T>(&self, guard: Guard<'a, T>) -> Guard<'a, T> {
         let wake = Arc::new(AtomicBool::new(false));
         let mutex = guard.mutex;
@@ -273,6 +299,7 @@ impl Condvar {
         mutex.lock_sync()
     }
 
+    /// Spins while the predicate returns `true`.
     pub fn wait_spin_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -287,6 +314,7 @@ impl Condvar {
         guard
     }
 
+    /// Spins with a deadline for notification.
     pub fn wait_spin_timeout<'a, T>(
         &self,
         guard: Guard<'a, T>,
@@ -323,6 +351,7 @@ impl Condvar {
         }
     }
 
+    /// Spins while predicate is `true` with a deadline.
     pub fn wait_spin_timeout_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -342,6 +371,7 @@ impl Condvar {
         (guard, WaitTimeoutResult(false))
     }
 
+    /// Asynchronously waits for a notification.
     pub async fn wait_async<'a, T>(&self, guard: Guard<'a, T>) -> Guard<'a, T> {
         let mutex = guard.mutex;
         let receiver = self.waiting_async_threads.with_mut(|waiters| {
@@ -355,6 +385,7 @@ impl Condvar {
         mutex.lock_async().await
     }
 
+    /// Asynchronously waits while the predicate returns `true`.
     pub async fn wait_async_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -369,6 +400,7 @@ impl Condvar {
         guard
     }
 
+    /// Asynchronously waits with a deadline.
     pub async fn wait_async_timeout<'a, T>(
         &self,
         guard: Guard<'a, T>,
@@ -402,24 +434,23 @@ impl Condvar {
             timeout: Option<F2>,
         }
 
-        impl<F1: Future + Unpin, F2: Future + Unpin>
-            Future for Race<F1, F2>
-        {
+        impl<F1: Future + Unpin, F2: Future + Unpin> Future for Race<F1, F2> {
             type Output = bool;
 
             fn poll(
-                mut self: std::pin::Pin<&mut Self>,
+                self: std::pin::Pin<&mut Self>,
                 cx: &mut std::task::Context<'_>,
             ) -> std::task::Poll<Self::Output> {
-                if let Some(ref mut notify) = self.notify {
+                let this = unsafe { self.get_unchecked_mut() };
+                if let Some(ref mut notify) = this.notify {
                     if std::pin::Pin::new(notify).poll(cx).is_ready() {
-                        self.notify = None;
+                        this.notify = None;
                         return std::task::Poll::Ready(false);
                     }
                 }
-                if let Some(ref mut timeout) = self.timeout {
+                if let Some(ref mut timeout) = this.timeout {
                     if std::pin::Pin::new(timeout).poll(cx).is_ready() {
-                        self.timeout = None;
+                        this.timeout = None;
                         return std::task::Poll::Ready(true);
                     }
                 }
@@ -446,6 +477,7 @@ impl Condvar {
         (guard, WaitTimeoutResult(timed_out))
     }
 
+    /// Asynchronously waits while predicate is `true` with a deadline.
     pub async fn wait_async_timeout_while<'a, T, F>(
         &self,
         mut guard: Guard<'a, T>,
@@ -466,10 +498,12 @@ impl Condvar {
     }
 }
 
+/// Indicates whether a timed wait returned due to a timeout.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Default)]
 pub struct WaitTimeoutResult(bool);
 
 impl WaitTimeoutResult {
+    /// Returns `true` if the wait timed out.
     pub fn timed_out(&self) -> bool {
         self.0
     }

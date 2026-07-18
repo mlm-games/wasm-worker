@@ -1,5 +1,3 @@
-#![allow(missing_docs)]
-
 use crate::sync::guard::Guard;
 use crate::sync::spinlock::Spinlock;
 use std::cell::UnsafeCell;
@@ -12,9 +10,14 @@ use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 use web_time::Instant;
 
+/// Error indicating the lock could not be acquired immediately.
 #[derive(Debug, Copy, Clone)]
 pub struct NotAvailable;
 
+/// A mutual exclusion primitive that works across native and WebAssembly.
+///
+/// Supports multiple locking strategies: try, spin, block, async, and sync
+/// (auto-selects blocking vs spinning based on platform support).
 #[derive(Debug)]
 pub struct Mutex<T> {
     pub(crate) inner: UnsafeCell<T>,
@@ -24,6 +27,7 @@ pub struct Mutex<T> {
 }
 
 impl<T> Mutex<T> {
+    /// Creates a new mutex with the given initial value.
     pub const fn new(value: T) -> Self {
         Mutex {
             inner: UnsafeCell::new(value),
@@ -33,6 +37,7 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Attempts to acquire the lock without blocking.
     pub fn try_lock(&self) -> Result<Guard<'_, T>, NotAvailable> {
         if self
             .data_lock
@@ -51,6 +56,7 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Acquires the lock by spinning until available.
     pub fn lock_spin(&self) -> Guard<'_, T> {
         while self.data_lock.swap(true, std::sync::atomic::Ordering::Acquire) {
             std::hint::spin_loop();
@@ -59,6 +65,7 @@ impl<T> Mutex<T> {
         Guard { mutex: self, data }
     }
 
+    /// Acquires the lock by spinning until available or deadline is reached.
     pub fn lock_spin_timeout(&self, deadline: Instant) -> Option<Guard<'_, T>> {
         while self.data_lock.swap(true, std::sync::atomic::Ordering::Acquire) {
             if Instant::now() >= deadline {
@@ -70,6 +77,7 @@ impl<T> Mutex<T> {
         Some(Guard { mutex: self, data })
     }
 
+    /// Acquires the lock by blocking via thread parking.
     pub fn lock_block(&self) -> Guard<'_, T> {
         loop {
             let r = self.waiting_sync_threads.with_mut(|threads| {
@@ -88,6 +96,7 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Acquires the lock by blocking with a deadline.
     pub fn lock_block_timeout(&self, deadline: Instant) -> Option<Guard<'_, T>> {
         loop {
             let now = Instant::now();
@@ -118,6 +127,7 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Asynchronously acquires the lock.
     pub async fn lock_async(&self) -> Guard<'_, T> {
         loop {
             let a = self.waiting_async_threads.with_mut(|senders| {
@@ -139,6 +149,7 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Asynchronously acquires the lock with a timeout.
     pub async fn lock_async_timeout(&self, deadline: Instant) -> Option<Guard<'_, T>> {
         loop {
             let now = Instant::now();
@@ -231,6 +242,9 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Acquires the lock using the best strategy for the platform.
+    ///
+    /// Blocks on native and WASM workers; spins on WASM main thread.
     pub fn lock_sync(&self) -> Guard<'_, T> {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -246,6 +260,7 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Acquires the lock using platform-adaptive strategy with a deadline.
     pub fn lock_sync_timeout(&self, deadline: Instant) -> Option<Guard<'_, T>> {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -261,21 +276,25 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Acquires the lock, calls `f` with a shared reference, then releases.
     pub fn with_sync<R, F: FnOnce(&T) -> R>(&self, f: F) -> R {
         let guard = self.lock_sync();
         f(&guard)
     }
 
+    /// Acquires the lock, calls `f` with a mutable reference, then releases.
     pub fn with_mut_sync<R, F: FnOnce(&mut T) -> R>(&self, f: F) -> R {
         let mut guard = self.lock_sync();
         f(&mut guard)
     }
 
+    /// Asynchronously acquires the lock, calls `f`, then releases.
     pub async fn with_async<R, F: FnOnce(&T) -> R>(&self, f: F) -> R {
         let guard = self.lock_async().await;
         f(&guard)
     }
 
+    /// Asynchronously acquires the lock, calls `f` mutably, then releases.
     pub async fn with_mut_async<R, F: FnOnce(&mut T) -> R>(&self, f: F) -> R {
         let mut guard = self.lock_async().await;
         f(&mut guard)
