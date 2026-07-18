@@ -7,6 +7,7 @@ keywords = ["worker", "worklet", "wasm", "web", "thread"]
 license = "MIT OR Apache-2.0"
 name = "web-thread"
 repository = "https://github.com/daxpedda/web-thread"
+rust-version = "1.85"
 version = "0.1.1"
 
 [features]
