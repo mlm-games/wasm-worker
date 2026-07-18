@@ -33,7 +33,7 @@ jobs:
               version: nightly,
               description: with Atomics,
               component: --component rust-src,
-              flags: "-Ctarget-feature=+atomics,+bulk-memory",
+              flags: "-Ctarget-feature=+atomics",
               args: "-Zbuild-std=panic_abort,std",
             }
         features:
@@ -108,7 +108,7 @@ jobs:
               post_description: with Atomics,
               atomics: true,
               component: --component rust-src,
-              flags: "-Ctarget-feature=+atomics,+bulk-memory",
+              flags: "-Ctarget-feature=+atomics",
               args: "-Zbuild-std=panic_abort,std",
             }
         features:
@@ -118,7 +118,7 @@ jobs:
           - { features: --all-features, description: (all features) }
         cross-origin-isolation:
           - { state: true }
-          - { state: false, description: (no COOP+COEP), flags: --cfg=unsupported_spawn }
+          - { state: false, description: (no COOP+COEP/DIP), flags: --cfg=unsupported_spawn }
         driver:
           - {
               os: ubuntu-latest,
@@ -134,7 +134,7 @@ jobs:
               value: geckodriver,
               flags:
                 --cfg=unsupported_service --cfg=unsupported_shared_block
-                --cfg=unsupported_wait_async --cfg=unsupported_headless_audiocontext,
+                --cfg=unsupported_headless_audiocontext,
             }
           - {
               os: macos-latest,
@@ -163,12 +163,12 @@ jobs:
                 post_description: with Atomics,
                 atomics: true,
                 component: --component rust-src,
-                flags: "-Ctarget-feature=+atomics,+bulk-memory",
+                flags: "-Ctarget-feature=+atomics",
                 args: "-Zbuild-std=panic_abort,std",
               }
             features: { features: "" }
             cross-origin-isolation:
-              { state: false, description: (no COOP+COEP), flags: --cfg=unsupported_spawn }
+              { state: false, description: (no COOP+COEP/DIP), flags: --cfg=unsupported_spawn }
           - rust:
               {
                 version: nightly,
@@ -176,12 +176,12 @@ jobs:
                 post_description: with Atomics,
                 atomics: true,
                 component: --component rust-src,
-                flags: "-Ctarget-feature=+atomics,+bulk-memory",
+                flags: "-Ctarget-feature=+atomics",
                 args: "-Zbuild-std=panic_abort,std",
               }
             features: { features: --features audio-worklet, description: (`audio-worklet`) }
             cross-origin-isolation:
-              { state: false, description: (no COOP+COEP), flags: --cfg=unsupported_spawn }
+              { state: false, description: (no COOP+COEP/DIP), flags: --cfg=unsupported_spawn }
           - rust:
               {
                 version: nightly,
@@ -189,12 +189,12 @@ jobs:
                 post_description: with Atomics,
                 atomics: true,
                 component: --component rust-src,
-                flags: "-Ctarget-feature=+atomics,+bulk-memory",
+                flags: "-Ctarget-feature=+atomics",
                 args: "-Zbuild-std=panic_abort,std",
               }
             features: { features: --features message, description: (`message`) }
             cross-origin-isolation:
-              { state: false, description: (no COOP+COEP), flags: --cfg=unsupported_spawn }
+              { state: false, description: (no COOP+COEP/DIP), flags: --cfg=unsupported_spawn }
 
     steps:
       - name: Checkout
@@ -248,7 +248,7 @@ jobs:
               version: nightly,
               description: with Atomics,
               component: --component rust-src,
-              flags: "-Ctarget-feature=+atomics,+bulk-memory",
+              flags: "-Ctarget-feature=+atomics",
               args: --features message,
               build_std: 1,
             }
@@ -290,7 +290,7 @@ jobs:
               version: nightly,
               description: Nightly (Atomics),
               component: --component rust-src,
-              flags: "-Ctarget-feature=+atomics,+bulk-memory",
+              flags: "-Ctarget-feature=+atomics",
               args: "-Zbuild-std=panic_abort,std",
             }
         features:

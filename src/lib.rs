@@ -15,13 +15,20 @@
 //!   (affects some browsers only).
 //! - Calling any functions from a thread not spawned by `web-thread` will cause
 //!   issues.
+//! - Wasm threads/atomics are now broadly supported (Baseline 2025+), but still
+//!   require cross-origin isolation for `SharedArrayBuffer`.
+//! - `Atomics.waitAsync()` is broadly available (Baseline 2025) and works on the
+//!   main thread for non-blocking waits.
+//! - Deploying cross-origin isolation can use COOP+COEP headers, or
+//!   `Document-Isolation-Policy` in Chromium 137+.
 //!
 //! Browser bugs:
 //! - Browsers don't support `TextEncoder`/`TextDecoder` in audio worklets:
 //!   - Chrome: ?
 //!   - Firefox: <https://bugzilla.mozilla.org/show_bug.cgi?id=1826432>
 //!   - Safari: ?
-//! - Firefox doesn't support module service workers: <https://bugzilla.mozilla.org/show_bug.cgi?id=1360870>.
+//! - Older Firefox doesn't support module service workers: <https://bugzilla.mozilla.org/show_bug.cgi?id=1360870>
+//!   (fixed in Firefox 147+).
 //! - Browsers don't support blocking in shared workers:
 //!   - Firefox: <https://bugzilla.mozilla.org/show_bug.cgi?id=1359745>
 //!   - Safari: ?

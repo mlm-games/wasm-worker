@@ -2,6 +2,9 @@
 
 ## Native
 
+Note: `+bulk-memory` is omitted below because modern Rust (1.87+) enables it by
+default for `wasm32-unknown-unknown`. It is only required with older toolchains.
+
 cargo test
 
 ## Single-Threaded
@@ -30,38 +33,38 @@ UI_TEST_TARGET=wasm32-unknown-unknown UI_TEST_ARGS="--features message" cargo te
 
 ## Multi-Threaded
 
-CHROMEDRIVER=chromedriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn_then_block -Ctarget-feature=+atomics,+bulk-memory" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn_then_block -Ctarget-feature=+atomics,+bulk-memory" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
-GECKODRIVER=geckodriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_service --cfg=unsupported_shared_block --cfg=unsupported_wait_async -Ctarget-feature=+atomics,+bulk-memory" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_service --cfg=unsupported_shared_block --cfg=unsupported_wait_async -Ctarget-feature=+atomics,+bulk-memory" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
+CHROMEDRIVER=chromedriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn_then_block -Ctarget-feature=+atomics" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn_then_block -Ctarget-feature=+atomics" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
+GECKODRIVER=geckodriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_service --cfg=unsupported_shared_block -Ctarget-feature=+atomics" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_service --cfg=unsupported_shared_block -Ctarget-feature=+atomics" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
 
 ## Multi-Threaded without Cross-Origin Isolation
 
-WASM_BINDGEN_TEST_NO_ORIGIN_ISOLATION=1 CHROMEDRIVER=chromedriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn -Ctarget-feature=+atomics,+bulk-memory" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn -Ctarget-feature=+atomics,+bulk-memory" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
-WASM_BINDGEN_TEST_NO_ORIGIN_ISOLATION=1 GECKODRIVER=geckodriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn --cfg=unsupported_service --cfg=unsupported_shared_block --cfg=unsupported_wait_async -Ctarget-feature=+atomics,+bulk-memory" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn --cfg=unsupported_service --cfg=unsupported_shared_block --cfg=unsupported_wait_async -Ctarget-feature=+atomics,+bulk-memory" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
+WASM_BINDGEN_TEST_NO_ORIGIN_ISOLATION=1 CHROMEDRIVER=chromedriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn -Ctarget-feature=+atomics" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn -Ctarget-feature=+atomics" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
+WASM_BINDGEN_TEST_NO_ORIGIN_ISOLATION=1 GECKODRIVER=geckodriver RUSTFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn --cfg=unsupported_service --cfg=unsupported_shared_block -Ctarget-feature=+atomics" RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=unsupported_spawn --cfg=unsupported_service --cfg=unsupported_shared_block -Ctarget-feature=+atomics" cargo +nightly test --all-features --target wasm32-unknown-unknown -Zdoctest-xcompile -Zbuild-std=panic_abort,std
 
 ## Multi-Threaded Compile Tests
 
-UI_TEST_TARGET=wasm32-unknown-unknown UI_TEST_RUSTFLAGS=-Ctarget-feature=+atomics,+bulk-memory UI_TEST_ARGS="--features message" UI_TEST_BUILD_STD=1 cargo +nightly test --test compile_test
+UI_TEST_TARGET=wasm32-unknown-unknown UI_TEST_RUSTFLAGS=-Ctarget-feature=+atomics UI_TEST_ARGS="--features message" UI_TEST_BUILD_STD=1 cargo +nightly test --test compile_test
 
 # Lint
 
 cargo clippy --all-targets
 RUSTFLAGS=--cfg=web_sys_unstable_apis cargo clippy --all-targets --all-features --target wasm32-unknown-unknown
-RUSTFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics,+bulk-memory" cargo +nightly clippy --all-targets --all-features --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std
+RUSTFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics" cargo +nightly clippy --all-targets --all-features --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std
 
 # Doc Lint
 
 cargo doc --no-deps --document-private-items --lib --examples
 RUSTDOCFLAGS=--cfg=web_sys_unstable_apis RUSTFLAGS=--cfg=web_sys_unstable_apis cargo doc --no-deps --document-private-items --lib --examples --all-features --target wasm32-unknown-unknown
-RUSTDOCFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics,+bulk-memory" RUSTFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics,+bulk-memory" cargo +nightly doc --no-deps --document-private-items --lib --examples --all-features --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std
+RUSTDOCFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics" RUSTFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics" cargo +nightly doc --no-deps --document-private-items --lib --examples --all-features --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std
 
 # docs.rs Lint
 
 RUSTDOCFLAGS=--cfg=docsrs cargo +nightly doc --no-deps --document-private-items --lib --examples
 RUSTDOCFLAGS=--cfg=docsrs cargo +nightly doc --no-deps --document-private-items --lib --examples --target wasm32-unknown-unknown
-RUSTDOCFLAGS="--cfg=docsrs -Ctarget-feature=+atomics,+bulk-memory" RUSTFLAGS=-Ctarget-feature=+atomics,+bulk-memory cargo +nightly doc --no-deps --document-private-items --lib --examples --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std
+RUSTDOCFLAGS="--cfg=docsrs -Ctarget-feature=+atomics" RUSTFLAGS=-Ctarget-feature=+atomics cargo +nightly doc --no-deps --document-private-items --lib --examples --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std
 
 # docs.rs Lint with all features
 
 RUSTDOCFLAGS=--cfg=docsrs cargo +nightly doc --no-deps --document-private-items --lib --examples --all-features
 RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=docsrs" RUSTFLAGS=--cfg=web_sys_unstable_apis cargo +nightly doc --no-deps --document-private-items --lib --examples --all-features --target wasm32-unknown-unknown
-RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=docsrs -Ctarget-feature=+atomics,+bulk-memory" RUSTFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics,+bulk-memory" cargo +nightly doc --no-deps --document-private-items --lib --examples --all-features --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std
+RUSTDOCFLAGS="--cfg=web_sys_unstable_apis --cfg=docsrs -Ctarget-feature=+atomics" RUSTFLAGS="--cfg=web_sys_unstable_apis -Ctarget-feature=+atomics" cargo +nightly doc --no-deps --document-private-items --lib --examples --all-features --target wasm32-unknown-unknown -Zbuild-std=panic_abort,std

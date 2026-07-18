@@ -29,8 +29,8 @@ jobs:
               id: 1,
               description: with Atomics,
               component: --component rust-src,
-              cflags: -matomics -mbulk-memory,
-              flags: "-Ctarget-feature=+atomics,+bulk-memory",
+              cflags: -matomics,
+              flags: "-Ctarget-feature=+atomics",
               args: "-Zbuild-std=panic_abort,std",
             }
 

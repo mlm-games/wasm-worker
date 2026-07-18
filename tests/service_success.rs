@@ -1,6 +1,6 @@
 #![expect(missing_docs, reason = "test crate")]
 #![cfg(target_family = "wasm")]
-// Firefox doesn't support module service workers.
+// Older Firefox doesn't support module service workers (fixed in Firefox 147+).
 // See <https://bugzilla.mozilla.org/show_bug.cgi?id=1360870>.
 #![cfg(not(unsupported_service))]
 

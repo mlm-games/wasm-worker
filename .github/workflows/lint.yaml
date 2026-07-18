@@ -31,7 +31,7 @@ jobs:
               version: nightly,
               description: with Atomics,
               component: ",rust-src",
-              flags: "-Ctarget-feature=+atomics,+bulk-memory",
+              flags: "-Ctarget-feature=+atomics",
               args: "-Zbuild-std=panic_abort,std",
             }
         features:
@@ -92,7 +92,7 @@ jobs:
               version: nightly,
               description: with Atomics,
               component: --component rust-src,
-              flags: "-Ctarget-feature=+atomics,+bulk-memory",
+              flags: "-Ctarget-feature=+atomics",
               args: "-Zbuild-std=panic_abort,std",
             }
         features:
