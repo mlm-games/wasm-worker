@@ -1,14 +1,14 @@
 [package]
 categories = ["api-bindings", "concurrency", "wasm"]
-description = "Drop-in replacement for std::thread for Wasm in browsers"
+description = "Drop-in replacement for std::thread (and few std::sync components) for Wasm in browsers"
 edition = "2024"
 include = ["CHANGELOG.md", "LICENSE-*", "src/**/*", "examples/**/*"]
 keywords = ["worker", "worklet", "wasm", "web", "thread"]
 license = "MIT OR Apache-2.0"
 name = "web-thread"
-repository = "https://github.com/daxpedda/web-thread"
+repository = "https://github.com/mlm-games/web-thread"
 rust-version = "1.85"
-version = "0.1.1"
+version = "0.2.1"
 
 [features]
 audio-worklet = [
@@ -56,7 +56,6 @@ js-sys = "0.3.103"
 pin-project = "1.1.13"
 wasm-bindgen = { version = "0.2.126", default-features = false }
 wasm-bindgen-futures = "0.4.76"
-web-time = "1.1"
 web-sys = { version = "0.3.103", features = [
 	"AbortController",
 	"AbortSignal",
@@ -71,6 +70,7 @@ web-sys = { version = "0.3.103", features = [
 	"Window",
 	"WorkerNavigator",
 ] }
+web-time = "1.1"
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown", target_feature = "atomics"))'.dependencies]
 atomic-waker = "1"
@@ -309,8 +309,8 @@ single_char_lifetime_names = "warn"
 str_to_string = "warn"
 string_add = "warn"
 string_lit_chars_any = "warn"
-	string_slice = "warn"
-	suspicious_xor_used_as_pow = "warn"
+string_slice = "warn"
+suspicious_xor_used_as_pow = "warn"
 todo = "warn"
 try_err = "warn"
 undocumented_unsafe_blocks = "warn"
