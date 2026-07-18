@@ -64,6 +64,8 @@
 	doc(cfg_hide(docsrs, target_family = "wasm", target_os = "unknown"))
 )]
 
+pub mod sync;
+
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 mod thread;
 #[cfg(any(all(target_family = "wasm", target_os = "unknown"), docsrs))]
